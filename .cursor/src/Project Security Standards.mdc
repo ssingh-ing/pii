@@ -1,5 +1,5 @@
 ---
-description: Reffer to this rule for how to create Authenication and securty for our project
+description: Refer to this rule for how to create Authentication and security for our project
 globs: 
 alwaysApply: false
 ---
