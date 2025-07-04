@@ -4,7 +4,9 @@ import FileUpload from './components/FileUpload';
 import TextInput from './components/TextInput';
 import ResultsDisplay from './components/ResultsDisplay';
 import AnonymizationOptions from './components/AnonymizationOptions';
+import ErrorBoundary from './components/ErrorBoundary';
 import { anonymizeText, deanonymizeText } from './services/presidioApi';
+import { showError, showSuccess } from './utils/notifications';
 
 const Container = styled.div`
   max-width: 1200px;
@@ -97,26 +99,38 @@ function App() {
   });
 
   const handleAnonymize = useCallback(async (text) => {
+    if (!text || !text.trim()) {
+      showError('Please enter some text to anonymize');
+      return;
+    }
+
     setIsLoading(true);
     try {
       const result = await anonymizeText(text, anonymizationOptions);
       setResults(result);
+      showSuccess('Text anonymized successfully');
     } catch (error) {
       console.error('Anonymization failed:', error);
-      alert('Failed to anonymize text. Please check if Presidio is running on localhost:5001');
+      showError('Failed to anonymize text. Please check if Presidio is running on localhost:5001');
     } finally {
       setIsLoading(false);
     }
   }, [anonymizationOptions]);
 
   const handleDeanonymize = useCallback(async (text, operatorResults) => {
+    if (!text || !operatorResults || operatorResults.length === 0) {
+      showError('Invalid data for deanonymization');
+      return;
+    }
+
     setIsLoading(true);
     try {
       const result = await deanonymizeText(text, operatorResults);
       setResults(prev => ({ ...prev, deanonymized: result }));
+      showSuccess('Text deanonymized successfully');
     } catch (error) {
       console.error('Deanonymization failed:', error);
-      alert('Failed to deanonymize text. Make sure the data was encrypted during anonymization.');
+      showError('Failed to deanonymize text. Make sure the data was encrypted during anonymization.');
     } finally {
       setIsLoading(false);
     }
@@ -127,45 +141,47 @@ function App() {
   }, []);
 
   return (
-    <Container>
-      <Header>
-        <Title>🔒 PII Anonymizer</Title>
-        <Subtitle>Protect sensitive data with Presidio-powered anonymization</Subtitle>
-      </Header>
+    <ErrorBoundary>
+      <Container>
+        <Header>
+          <Title>🔒 PII Anonymizer</Title>
+          <Subtitle>Protect sensitive data with Presidio-powered anonymization</Subtitle>
+        </Header>
 
-      <MainContent>
-        <Section>
-          <SectionTitle>📁 Input</SectionTitle>
-          <FileUpload onFileUpload={handleFileUpload} />
-          <TextInput 
-            value={inputText}
-            onChange={setInputText}
-            onAnonymize={handleAnonymize}
+        <MainContent>
+          <Section>
+            <SectionTitle>📁 Input</SectionTitle>
+            <FileUpload onFileUpload={handleFileUpload} />
+            <TextInput 
+              value={inputText}
+              onChange={setInputText}
+              onAnonymize={handleAnonymize}
+            />
+          </Section>
+
+          <Section>
+            <SectionTitle>⚙️ Configuration</SectionTitle>
+            <AnonymizationOptions 
+              options={anonymizationOptions}
+              onChange={setAnonymizationOptions}
+            />
+          </Section>
+        </MainContent>
+
+        {results && (
+          <ResultsDisplay 
+            results={results}
+            onDeanonymize={handleDeanonymize}
           />
-        </Section>
+        )}
 
-        <Section>
-          <SectionTitle>⚙️ Configuration</SectionTitle>
-          <AnonymizationOptions 
-            options={anonymizationOptions}
-            onChange={setAnonymizationOptions}
-          />
-        </Section>
-      </MainContent>
-
-      {results && (
-        <ResultsDisplay 
-          results={results}
-          onDeanonymize={handleDeanonymize}
-        />
-      )}
-
-      {isLoading && (
-        <LoadingOverlay>
-          <LoadingSpinner />
-        </LoadingOverlay>
-      )}
-    </Container>
+        {isLoading && (
+          <LoadingOverlay>
+            <LoadingSpinner />
+          </LoadingOverlay>
+        )}
+      </Container>
+    </ErrorBoundary>
   );
 }
 

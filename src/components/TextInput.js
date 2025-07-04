@@ -1,5 +1,6 @@
 import React from 'react';
 import styled from 'styled-components';
+import PropTypes from 'prop-types';
 
 const Container = styled.div`
   margin-bottom: 20px;
@@ -88,20 +89,24 @@ const TextInput = ({ value, onChange, onAnonymize }) => {
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder="Enter or paste your text here to anonymize sensitive information..."
+        aria-label="Text input for anonymization"
+        aria-describedby="char-count"
       />
-      <CharCount>
+      <CharCount id="char-count">
         {value.length} characters
       </CharCount>
       <ButtonContainer>
         <Button 
           onClick={handleAnonymize}
           disabled={!value.trim()}
+          aria-label="Anonymize the entered text"
         >
           🔒 Anonymize Text
         </Button>
         <ClearButton 
           onClick={handleClear}
           disabled={!value}
+          aria-label="Clear the text input"
         >
           🗑️ Clear
         </ClearButton>
@@ -110,4 +115,10 @@ const TextInput = ({ value, onChange, onAnonymize }) => {
   );
 };
 
-export default TextInput; 
+TextInput.propTypes = {
+  value: PropTypes.string.isRequired,
+  onChange: PropTypes.func.isRequired,
+  onAnonymize: PropTypes.func.isRequired
+};
+
+export default TextInput;

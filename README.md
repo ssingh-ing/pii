@@ -25,12 +25,18 @@ A modern React.js application that integrates with Microsoft Presidio to anonymi
 npm install
 ```
 
-2. Start the development server:
+2. Set up environment variables:
+```bash
+cp .env.example .env
+# Edit .env file with your configuration
+```
+
+3. Start the development server:
 ```bash
 npm start
 ```
 
-3. Open your browser and navigate to `http://localhost:3000`
+4. Open your browser and navigate to `http://localhost:3000`
 
 ## Usage
 
@@ -173,9 +179,13 @@ I live at [IP] and was born on [DATE].
 
 - This application processes sensitive data - ensure secure deployment
 - Use HTTPS in production environments
+- Set secure environment variables in production:
+  - `REACT_APP_PRESIDIO_BASE_URL`: Use your production Presidio endpoint
+  - `REACT_APP_ENCRYPTION_KEY`: Use a secure random key for encryption
 - Consider data retention policies for processed text
 - Review Presidio's security recommendations
 - Never log or store sensitive information
+- The application includes XSS protection and input sanitization
 
 ## Contributing
 

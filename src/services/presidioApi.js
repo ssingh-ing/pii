@@ -1,10 +1,12 @@
 import axios from 'axios';
 
-const PRESIDIO_BASE_URL = '';
+const PRESIDIO_BASE_URL = process.env.REACT_APP_PRESIDIO_BASE_URL || 'http://localhost:5001';
 
-// First, we need to analyze the text to detect PII entities
-// Since we're using the anonymizer API, we'll need to simulate analyzer results
-// In a real implementation, you'd call the analyzer API first
+/**
+ * Analyzes text to detect PII entities using pattern matching
+ * @param {string} text - The text to analyze
+ * @returns {Promise<Array>} Array of detected entities with start, end, score, and entity_type
+ */
 const analyzeText = async (text) => {
   // This is a mock analyzer that detects common PII patterns
   // In production, you'd call the actual Presidio analyzer
@@ -91,6 +93,12 @@ const analyzeText = async (text) => {
   return entities;
 };
 
+/**
+ * Anonymizes text using Presidio API
+ * @param {string} text - The text to anonymize
+ * @param {Object} anonymizers - Configuration for anonymization
+ * @returns {Promise<Object>} Object containing original text, anonymized text, entities, and operator results
+ */
 export const anonymizeText = async (text, anonymizers) => {
   try {
     // First analyze the text to get entities
@@ -103,7 +111,9 @@ export const anonymizeText = async (text, anonymizers) => {
       analyzer_results: analyzerResults
     };
     
-    console.log('Sending to Presidio:', payload);
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Sending to Presidio:', payload);
+    }
     
     // Call the Presidio anonymizer API
     const response = await axios.post(`${PRESIDIO_BASE_URL}/anonymize`, payload, {
@@ -129,12 +139,18 @@ export const anonymizeText = async (text, anonymizers) => {
   }
 };
 
+/**
+ * Deanonymizes text using Presidio API
+ * @param {string} text - The anonymized text to deanonymize
+ * @param {Array} operatorResults - The operator results from anonymization
+ * @returns {Promise<Object>} Object containing deanonymized text and items
+ */
 export const deanonymizeText = async (text, operatorResults) => {
   try {
     const payload = {
       text: text,
       deanonymizers: {
-        'DEFAULT': { type: 'decrypt', key: 'WmZq4t7w!z%C&F)J' }
+        'DEFAULT': { type: 'decrypt', key: process.env.REACT_APP_ENCRYPTION_KEY || 'WmZq4t7w!z%C&F)J' }
       },
       anonymizer_results: operatorResults
     };
