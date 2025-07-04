@@ -1,0 +1,470 @@
+---
+description: Reffer to this rule for how to create error handling service  and error handling guidance
+globs: 
+alwaysApply: false
+---
+# FOR REFERENCE ONLY - ERROR HANDLING
+
+# Error Handling Standards - GUIDANCE FOR YOU ON HOW TO FOLLOW ERROR HANDLING DEVELOPMENT RULES AND STANDARDS FOR OUR PROJECT
+
+## Custom Error Classes
+```typescript
+export abstract class AppError extends Error {
+  abstract readonly statusCode: number;
+  abstract readonly isOperational: boolean;
+
+  constructor(
+    message: string,
+    public readonly context?: Record<string, any>
+  ) {
+    super(message);
+    Object.setPrototypeOf(this, AppError.prototype);
+    
+    // Capture stack trace
+    Error.captureStackTrace(this, this.constructor);
+  }
+}
+
+export class ValidationError extends AppError {
+  readonly statusCode = 400;
+  readonly isOperational = true;
+
+  constructor(message: string, public readonly field?: string) {
+    super(message);
+  }
+}
+
+export class UnauthorizedError extends AppError {
+  readonly statusCode = 401;
+  readonly isOperational = true;
+
+  constructor(message: string = 'Unauthorized') {
+    super(message);
+  }
+}
+
+export class ForbiddenError extends AppError {
+  readonly statusCode = 403;
+  readonly isOperational = true;
+
+  constructor(message: string = 'Forbidden') {
+    super(message);
+  }
+}
+
+export class NotFoundError extends AppError {
+  readonly statusCode = 404;
+  readonly isOperational = true;
+
+  constructor(message: string = 'Resource not found') {
+    super(message);
+  }
+}
+
+export class ConflictError extends AppError {
+  readonly statusCode = 409;
+  readonly isOperational = true;
+
+  constructor(message: string) {
+    super(message);
+  }
+}
+
+export class BusinessRuleError extends AppError {
+  readonly statusCode = 422;
+  readonly isOperational = true;
+
+  constructor(message: string, context?: Record<string, any>) {
+    super(message, context);
+  }
+}
+
+export class InternalServerError extends AppError {
+  readonly statusCode = 500;
+  readonly isOperational = false;
+
+  constructor(message: string = 'Internal server error') {
+    super(message);
+  }
+}
+```
+
+## Error Middleware
+```typescript
+import { Request, Response, NextFunction } from 'express';
+import { AppError } from '../utils/errors';
+import { logger } from '../utils/logger';
+
+export const errorHandler = (
+  error: Error,
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void => {
+  // Log error with context
+  const errorContext = {
+    method: req.method,
+    url: req.url,
+    userAgent: req.get('User-Agent'),
+    ip: req.ip,
+    userId: req.user?.id,
+    timestamp: new Date().toISOString(),
+  };
+
+  if (error instanceof AppError) {
+    // Log operational errors as warnings
+    logger.warn('Operational error occurred', {
+      message: error.message,
+      statusCode: error.statusCode,
+      stack: error.stack,
+      context: { ...errorContext, ...error.context },
+    });
+
+    res.status(error.statusCode).json({
+      success: false,
+      message: error.message,
+      ...(process.env.NODE_ENV === 'development' && { 
+        stack: error.stack,
+        context: error.context 
+      }),
+    });
+    return;
+  }
+
+  // Handle specific known errors
+  if (error.name === 'ValidationError') {
+    logger.warn('Validation error', { ...errorContext, error: error.message });
+    res.status(400).json({
+      success: false,
+      message: 'Validation failed',
+      errors: error.message,
+    });
+    return;
+  }
+
+  if (error.name === 'JsonWebTokenError') {
+    logger.warn('JWT error', { ...errorContext, error: error.message });
+    res.status(401).json({
+      success: false,
+      message: 'Invalid authentication token',
+    });
+    return;
+  }
+
+  if (error.name === 'TokenExpiredError') {
+    logger.warn('JWT expired', { ...errorContext });
+    res.status(401).json({
+      success: false,
+      message: 'Authentication token has expired',
+    });
+    return;
+  }
+
+  if (error.code === 'ECONNREFUSED') {
+    logger.error('Database connection failed', { ...errorContext, error: error.message });
+    res.status(503).json({
+      success: false,
+      message: 'Service temporarily unavailable',
+    });
+    return;
+  }
+
+  // Unexpected errors
+  logger.error('Unexpected error occurred', {
+    message: error.message,
+    stack: error.stack,
+    context: errorContext,
+  });
+
+  res.status(500).json({
+    success: false,
+    message: 'Internal server error',
+    ...(process.env.NODE_ENV === 'development' && { 
+      error: error.message,
+      stack: error.stack 
+    }),
+  });
+};
+```
+
+## Controller Error Handling
+```typescript
+export class UserController {
+  constructor(private userService: UserService) {}
+
+  // Method 1: Try-catch with next()
+  async createUser(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userData = req.body as CreateUserRequest;
+      const user = await this.userService.createUser(userData);
+      res.status(201).json({
+        success: true,
+        data: user,
+        message: 'User created successfully'
+      });
+    } catch (error) {
+      next(error); // Always pass to error middleware
+    }
+  }
+
+  // Method 2: Using asyncHandler wrapper
+  getUserById = asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const user = await this.userService.findById(id);
+    
+    if (!user) {
+      throw new NotFoundError('User not found');
+    }
+
+    res.json({ success: true, data: user });
+  });
+}
+```
+
+## Async Error Wrapper
+```typescript
+type AsyncRequestHandler = (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => Promise<void>;
+
+export const asyncHandler = (fn: AsyncRequestHandler) => {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    Promise.resolve(fn(req, res, next)).catch(next);
+  };
+};
+
+// Usage
+app.get('/users/:id', asyncHandler(async (req, res) => {
+  const user = await userService.findById(req.params.id);
+  res.json({ data: user });
+}));
+```
+
+## Service Error Handling
+```typescript
+export class UserService {
+  async createUser(userData: CreateUserRequest): Promise<User> {
+    try {
+      // Validate input
+      if (!userData.email) {
+        throw new ValidationError('Email is required', 'email');
+      }
+
+      // Check business rules
+      const existingUser = await this.userRepository.findByEmail(userData.email);
+      if (existingUser) {
+        throw new ConflictError('User with this email already exists');
+      }
+
+      // Create user
+      const user = await this.userRepository.create(userData);
+      
+      // Handle side effects
+      try {
+        await this.emailService.sendWelcomeEmail(user.email);
+      } catch (emailError) {
+        // Log but don't fail the operation
+        this.logger.warn('Failed to send welcome email', {
+          userId: user.id,
+          email: user.email,
+          error: emailError.message
+        });
+      }
+
+      return user;
+    } catch (error) {
+      // Log with context
+      this.logger.error('Failed to create user', {
+        userData: { ...userData, password: '[REDACTED]' },
+        error: error.message,
+        stack: error.stack
+      });
+
+      // Re-throw known errors
+      if (error instanceof AppError) {
+        throw error;
+      }
+
+      // Wrap unknown errors
+      throw new InternalServerError('Failed to create user');
+    }
+  }
+}
+```
+
+## Database Error Handling
+```typescript
+export class TypeOrmUserRepository implements UserRepository {
+  constructor(private repository: Repository<User>) {}
+
+  async findById(id: string): Promise<User | null> {
+    try {
+      return await this.repository.findOne({ where: { id } });
+    } catch (error) {
+      if (error.code === '22P02') { // Invalid UUID format
+        throw new ValidationError('Invalid user ID format');
+      }
+      
+      if (error.code === 'ECONNREFUSED') {
+        throw new InternalServerError('Database connection failed');
+      }
+
+      throw new InternalServerError('Database query failed');
+    }
+  }
+
+  async create(userData: CreateUserRequest): Promise<User> {
+    try {
+      const user = this.repository.create(userData);
+      return await this.repository.save(user);
+    } catch (error) {
+      if (error.code === '23505') { // Unique violation
+        throw new ConflictError('User with this email already exists');
+      }
+
+      if (error.code === '23502') { // Not null violation
+        throw new ValidationError('Required field is missing');
+      }
+
+      throw new InternalServerError('Failed to create user');
+    }
+  }
+}
+```
+
+## Validation Error Details
+```typescript
+export class DetailedValidationError extends AppError {
+  readonly statusCode = 400;
+  readonly isOperational = true;
+
+  constructor(
+    message: string,
+    public readonly errors: Array<{
+      field: string;
+      message: string;
+      value?: any;
+    }>
+  ) {
+    super(message);
+  }
+}
+
+// Usage with Zod
+export const validateRequest = (schema: z.ZodSchema) => {
+  return (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = schema.parse({
+        body: req.body,
+        params: req.params,
+        query: req.query
+      });
+      
+      req.body = result.body || req.body;
+      req.params = result.params || req.params;
+      req.query = result.query || req.query;
+      
+      next();
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const validationErrors = error.errors.map(err => ({
+          field: err.path.join('.'),
+          message: err.message,
+          value: err.input
+        }));
+
+        next(new DetailedValidationError(
+          'Validation failed',
+          validationErrors
+        ));
+      } else {
+        next(error);
+      }
+    }
+  };
+};
+```
+
+## Error Response Formats
+```typescript
+// Successful response
+{
+  "success": true,
+  "data": { /* response data */ },
+  "message": "Operation completed successfully"
+}
+
+// Single error response
+{
+  "success": false,
+  "message": "User not found"
+}
+
+// Validation error response
+{
+  "success": false,
+  "message": "Validation failed",
+  "errors": [
+    {
+      "field": "email",
+      "message": "Invalid email format",
+      "value": "invalid-email"
+    },
+    {
+      "field": "password",
+      "message": "Password must be at least 8 characters",
+      "value": "123"
+    }
+  ]
+}
+
+// Development error response (includes stack trace)
+{
+  "success": false,
+  "message": "Internal server error",
+  "stack": "Error: Something went wrong...",
+  "context": {
+    "userId": "123",
+    "operation": "createUser"
+  }
+}
+```
+
+## Process Error Handling
+```typescript
+// Graceful shutdown on uncaught exceptions
+process.on('uncaughtException', (error: Error) => {
+  logger.error('Uncaught Exception', {
+    message: error.message,
+    stack: error.stack
+  });
+  
+  // Close server gracefully
+  server.close(() => {
+    process.exit(1);
+  });
+});
+
+process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
+  logger.error('Unhandled Rejection', {
+    reason: reason?.message || reason,
+    stack: reason?.stack
+  });
+  
+  // Close server gracefully
+  server.close(() => {
+    process.exit(1);
+  });
+});
+
+// Graceful shutdown on SIGTERM
+process.on('SIGTERM', () => {
+  logger.info('SIGTERM received, shutting down gracefully');
+  server.close(() => {
+    logger.info('Process terminated');
+  });
+});
+```
+

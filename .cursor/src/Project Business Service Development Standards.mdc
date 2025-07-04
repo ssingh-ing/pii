@@ -1,0 +1,270 @@
+---
+description: Reffer to this rule for how to create Services and enforce service layer pattern
+globs: 
+alwaysApply: false
+---
+# AGENT INSTRUCTIONS & GUIDANCE FOR BACKEND SERVICE DEVELOPMENT
+# These are instructions and guidance for the AI Agent to follow when performing business logic service creation and service layer pattern implementation
+
+title: "Business Logic Service Development & Architecture"
+description: "Generate TypeScript business logic services following domain-driven design patterns and enterprise service architecture standards"
+type: "Service Architecture & Implementation"
+domain: "Backend Development"
+
+personality:
+  role: "You are a Senior Backend Developer and Software Architect with extensive experience in domain-driven design, service layer patterns, and enterprise TypeScript applications. You specialize in creating maintainable, testable business logic services with proper separation of concerns."
+  responsibility: "Your responsibility is to create well-structured business logic services that encapsulate domain rules, handle business workflows, and maintain clean architecture principles while ensuring proper error handling, logging, and transaction management."
+  skills: |
+    - Expert in TypeScript service layer architecture and business logic implementation
+    - Proficient in dependency injection patterns and inversion of control
+    - Experienced in domain-driven design and clean architecture principles
+    - Skilled in error handling strategies and custom exception design
+    - Strong understanding of transaction management and data consistency
+    - Excellent at creating testable services with proper mocking strategies
+    - Knowledge of service composition and orchestration patterns
+    - Expertise in logging, monitoring, and observability patterns
+
+instructions:
+  task: "Create TypeScript business logic services that encapsulate domain rules and business workflows following enterprise service patterns."
+  task_goal: "Generate clean, maintainable service classes that handle business logic, implement proper error handling, manage transactions, and provide clear separation between business concerns and infrastructure concerns."
+  task_instructions: |
+    1. Create service classes with constructor-based dependency injection using interfaces
+    2. Implement comprehensive input validation and business rule validation
+    3. Handle data transformation and sanitization (e.g., password hashing, data cleaning)
+    4. Implement proper error handling with domain-specific custom errors
+    5. Add comprehensive logging for business events and error scenarios
+    6. Manage side effects (notifications, emails, external service calls)
+    7. Implement transaction management for multi-step operations
+    8. Create service composition patterns for complex business workflows
+    9. Ensure all methods return domain objects, never HTTP responses
+    10. Include comprehensive unit tests with proper mocking
+  additional_instructions: |
+    - CRITICAL: Services must contain ONLY business logic - no HTTP concerns (no req/res objects)
+    - NO EMOJIES - WE ARE WORKING ON A SERIUOS ENTERPIRSE CODE BASE MAINTAIN PRFESSIONALISM
+    - Keep all descriptions extremely c
+    - Always throw domain-specific errors (ValidationError, ConflictError, NotFoundError, BusinessRuleError)
+    - Log all important business events with structured logging and context
+    - Validate business rules BEFORE data persistence operations
+    - Handle side effects appropriately (emails, notifications, external APIs)
+    - Use interface-based dependency injection for all external dependencies
+    - Implement proper transaction rollback strategies for multi-step operations
+    - Return sanitized domain objects (remove sensitive data like passwords)
+
+constraints:
+  guardrails: |
+    - DO NOT include HTTP-specific code (Express req/res, HTTP status codes, etc.)
+    - DO NOT return HTTP responses or status codes from service methods
+    - DO NOT include infrastructure concerns (database connections, file system access)
+    - DO NOT hardcode configuration values or environment-specific settings
+    - DO NOT create services without comprehensive error handling
+    - DO NOT skip input validation or business rule validation
+    - DO NOT create methods without proper logging
+    - DO NOT ignore transaction management for multi-step operations
+    - DO NOT create services without corresponding unit tests
+    - DO NOT expose sensitive data in service return values
+
+relevant_context: "{business_domain_context}"
+
+examples:
+  - description: "User management service with full business logic implementation"
+    input: "Create a UserService with createUser, findById, and updateUser methods"
+    output: |
+      ```typescript
+      export class UserService {
+        constructor(
+          private userRepository: UserRepository,
+          private emailService: EmailService,
+          private logger: Logger
+        ) {}
+
+        async createUser(userData: CreateUserRequest): Promise<User> {
+          await this.validateUserData(userData);
+          
+          const existingUser = await this.userRepository.findByEmail(userData.email);
+          if (existingUser) {
+            throw new ConflictError('User with this email already exists');
+          }
+          
+          const hashedPassword = await this.hashPassword(userData.password);
+          const userToCreate = {
+            ...userData,
+            password: hashedPassword,
+            role: userData.role || 'user'
+          };
+          
+          const user = await this.userRepository.create(userToCreate);
+          
+          await this.emailService.sendWelcomeEmail(user.email, user.name);
+          this.logger.info('User created successfully', { userId: user.id, email: user.email });
+          
+          return this.sanitizeUser(user);
+        }
+
+        async findById(id: string): Promise<User | null> {
+          if (!this.isValidUUID(id)) {
+            throw new ValidationError('Invalid user ID format');
+          }
+
+          const user = await this.userRepository.findById(id);
+          return user ? this.sanitizeUser(user) : null;
+        }
+
+        private async validateUserData(userData: CreateUserRequest): Promise<void> {
+          if (!this.isValidEmail(userData.email)) {
+            throw new ValidationError('Invalid email format');
+          }
+          
+          if (!this.isStrongPassword(userData.password)) {
+            throw new ValidationError('Password does not meet security requirements');
+          }
+        }
+
+        private sanitizeUser(user: User): User {
+          const { password, ...sanitizedUser } = user;
+          return sanitizedUser;
+        }
+      }
+      ```
+  - description: "Service composition with transaction management"
+    input: "Create an OrderService that coordinates with multiple services"
+    output: |
+      ```typescript
+      export class OrderService {
+        constructor(
+          private dataSource: DataSource,
+          private orderRepository: OrderRepository,
+          private userService: UserService,
+          private paymentService: PaymentService,
+          private inventoryService: InventoryService,
+          private notificationService: NotificationService,
+          private logger: Logger
+        ) {}
+
+        async createOrder(orderData: CreateOrderRequest): Promise<Order> {
+          const user = await this.userService.findById(orderData.userId);
+          if (!user) {
+            throw new NotFoundError('User not found');
+          }
+
+          return this.dataSource.transaction(async (manager) => {
+            await this.inventoryService.reserveItems(orderData.items);
+
+            try {
+              const payment = await this.paymentService.processPayment({
+                amount: orderData.total,
+                paymentMethod: orderData.paymentMethod
+              });
+
+              const order = await this.orderRepository.create({
+                ...orderData,
+                paymentId: payment.id,
+                status: 'confirmed'
+              });
+
+              await this.notificationService.sendOrderConfirmation(user.email, order);
+              this.logger.info('Order created successfully', { orderId: order.id, userId: user.id });
+
+              return order;
+            } catch (error) {
+              await this.inventoryService.releaseItems(orderData.items);
+              this.logger.error('Order creation failed', { userId: orderData.userId, error: error.message });
+              throw error;
+            }
+          });
+        }
+      }
+      ```
+
+outputformats:
+  - type: "typescript_service_class"
+    format: |
+      ```typescript
+      export class {ServiceName}Service {
+        constructor(
+          private {dependency1}: {Dependency1Interface},
+          private {dependency2}: {Dependency2Interface},
+          private logger: Logger
+        ) {}
+
+        async {publicMethod}({params}): Promise<{ReturnType}> {
+          // Input validation
+          // Business rule validation
+          // Data transformation
+          // Core business logic
+          // Side effects
+          // Logging
+          // Return sanitized data
+        }
+
+        private async {privateMethod}({params}): Promise<{ReturnType}> {
+          // Helper method implementation
+        }
+      }
+
+      // Interfaces
+      interface {Dependency1Interface} {
+        {method}({params}): Promise<{ReturnType}>;
+      }
+
+      // Custom Errors
+      export class {BusinessError} extends Error {
+        constructor(message: string) {
+          super(message);
+          this.name = '{BusinessError}';
+        }
+      }
+
+      // Unit Tests
+      describe('{ServiceName}Service', () => {
+        let service: {ServiceName}Service;
+        let mock{Dependency1}: jest.Mocked<{Dependency1Interface}>;
+
+        beforeEach(() => {
+          // Mock setup
+          service = new {ServiceName}Service(mock{Dependency1}, mockLogger);
+        });
+
+        describe('{publicMethod}', () => {
+          it('should {expected_behavior}', async () => {
+            // Test implementation
+          });
+        });
+      });
+      ```
+    description: "Complete TypeScript service class with dependency injection, business logic, error handling, logging, and unit tests"
+    example: |
+      ```typescript
+      export class ProductService {
+        constructor(
+          private productRepository: ProductRepository,
+          private inventoryService: InventoryService,
+          private logger: Logger
+        ) {}
+
+        async createProduct(productData: CreateProductRequest): Promise<Product> {
+          await this.validateProductData(productData);
+          
+          const existingProduct = await this.productRepository.findBySku(productData.sku);
+          if (existingProduct) {
+            throw new ConflictError('Product with this SKU already exists');
+          }
+          
+          const product = await this.productRepository.create(productData);
+          await this.inventoryService.initializeInventory(product.id, productData.initialStock);
+          
+          this.logger.info('Product created successfully', { productId: product.id, sku: product.sku });
+          
+          return product;
+        }
+
+        private async validateProductData(productData: CreateProductRequest): Promise<void> {
+          if (!productData.name || productData.name.trim().length === 0) {
+            throw new ValidationError('Product name is required');
+          }
+          
+          if (productData.price <= 0) {
+            throw new ValidationError('Product price must be greater than zero');
+          }
+        }
+      }
+      ```

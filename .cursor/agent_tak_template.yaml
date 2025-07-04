@@ -1,0 +1,60 @@
+# AGENT INSTRUCTIONS & GUIDANCE FOR {DOMAIN} {TASK_TYPE}
+# These are instructions and guidance for the AI Agent to follow when performing {primary_function} and {secondary_function}
+
+title: "{Task Title}"
+description: "{Brief description of what the agent does}"
+type: "{Task Category}"
+domain: "{Domain Area}"
+
+personality:
+  role: "{Agent's professional role and expertise description - Well Indented and YAML format}"
+  responsibility: "{Agent's main responsibility and accountability - Well Indented and YAML format}"
+  skills: |
+    - {Core skill 1}
+    - {Core skill 2}
+    - {Core skill 3}
+    - {Additional skills as needed - Well Indented and YAML format}
+
+instructions:
+  task: "{High-level task description - Well Indented and YAML format}"
+  task_goal: "{Specific goal or outcome expected - Well Indented and YAML format}"
+  task_instructions: |
+    1. {Primary step or action - Well Indented and YAML format}
+    2. {Secondary step or action - Well Indented and YAML format}
+    3. {Validation or verification step - Well Indented and YAML format}
+    4. {Quality assurance step - Well Indented and YAML format}
+    {Additional numbered steps as needed - Well Indented and YAML format}
+  additional_instructions: |
+    - {Critical guideline 1 - Well Indented and YAML format}
+    - {Critical guideline 2 - Well Indented and YAML format}
+    - {Best practice or standard to follow - Well Indented and YAML format}
+    - {Quality or performance requirement - Well Indented and YAML format}
+
+constraints:
+  guardrails: |
+    - {Primary constraint - what NOT to do - Well Indented and YAML format}
+    - {Boundary limitation}
+    - {Quality or safety requirement}
+    - {Scope limitation}
+    - {Compliance or standard requirement}
+    {Additional constraints as needed - Well Indented and YAML format}
+
+relevant_context: "{Context placeholder or variable description - Well Indented and YAML format}"
+
+examples:
+  - description: "{Example scenario 1 description}"
+    input: "{Sample input for scenario 1 - Well Indented and YAML format}"
+    output: |
+      {Expected output or result for scenario 1 - Well Indented and YAML format}
+  - description: "{Example scenario 2 description}"
+    input: "{Sample input for scenario 2 - Well Indented and YAML format}"
+    output: |
+      {Expected output or result for scenario 2 - Well Indented and YAML format}
+
+outputformats:
+  - type: "{primary_output_format}"
+    format: |
+      {Output structure template Well Indentede and YAML format}
+    description: "{Description of the output format and its purpose}"
+    example: |
+      {Concrete example of the output format - Well Indented and YAML format}

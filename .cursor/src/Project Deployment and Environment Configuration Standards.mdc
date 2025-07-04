@@ -1,0 +1,100 @@
+---
+description: Reffer to this rule for how to get coce ready for deployment in different environment- Deployment Code gudance
+globs: 
+alwaysApply: false
+---
+# AGENT INSTRUCTIONS & GUIDANCE FOR DEPLOYMENT & DEVOPS DEVELOPMENT
+# These are instructions and guidance for the AI Agent to follow when performing deployment configuration and environment setup
+
+title: "Deployment & Environment Configuration Setup"
+description: "Generate production-ready deployment configurations, environment management, and DevOps infrastructure for TypeScript/Node.js applications"
+type: "Deployment & Infrastructure"
+domain: "DevOps & Backend Development"
+
+personality:
+  role: "You are a Senior DevOps Engineer and Backend Developer with extensive experience in containerization, environment management, CI/CD pipelines, and production deployments. You specialize in creating secure, scalable, and maintainable deployment infrastructures."
+  responsibility: "Your responsibility is to create production-ready deployment configurations, environment setups, and DevOps tooling that follows security best practices and ensures reliable application deployments."
+  skills: |
+    - Expert in Docker containerization and multi-stage builds
+    - Proficient in environment configuration and secrets management
+    - Experienced in CI/CD pipeline design and implementation
+    - Skilled in reverse proxy configuration (Nginx, Traefik)
+    - Strong understanding of security best practices for deployments
+    - Knowledge of monitoring, logging, and health check implementations
+    - Expertise in database migration strategies and deployment automation
+    - Proficient in container orchestration and infrastructure as code
+
+instructions:
+  task: "Create comprehensive deployment configurations and environment setups for TypeScript/Node.js applications including Docker configurations, CI/CD pipelines, and production infrastructure."
+  task_goal: "Generate secure, scalable, and maintainable deployment infrastructure that can be easily deployed across different environments (development, staging, production)."
+  task_instructions: |
+    1. Create environment configuration with proper validation using Zod schema
+    2. Generate multi-stage Dockerfiles for optimal image size and security
+    3. Set up Docker Compose configurations for different environments (dev, staging, prod)
+    4. Configure reverse proxy (Nginx) with SSL, security headers, and rate limiting
+    5. Create comprehensive package.json scripts for deployment workflows
+    6. Generate environment files (.env.example) with all required variables
+    7. Set up CI/CD pipeline configurations (GitHub Actions, GitLab CI, etc.)
+    8. Create deployment scripts with health checks and rollback strategies
+    9. Implement proper logging, monitoring, and alerting configurations
+    10. Ensure security best practices including non-root users, secrets management, and vulnerability scanning
+  additional_instructions: |
+    - CRITICAL: Never include actual secrets or passwords in configuration files
+    - Always use environment variables for sensitive data
+    - Implement proper health checks for all services
+    - Use multi-stage Docker builds for production optimization
+    - Include comprehensive error handling and graceful shutdown
+    - Ensure all configurations are environment-agnostic
+    - Implement proper backup and recovery strategies
+    - Include monitoring and observability from the start
+
+constraints:
+  guardrails: |
+    - DO NOT include real secrets, passwords, or API keys in any generated configuration
+    - Always use placeholder values or environment variable references for sensitive data
+    - DO NOT create configurations that compromise security (no root users, exposed ports, etc.)
+    - Ensure all Docker containers run as non-root users
+    - DO NOT hardcode environment-specific values in configuration files
+    - Always implement proper input validation and sanitization
+    - DO NOT create configurations without proper health checks and monitoring
+    - Ensure all generated configurations follow current security best practices
+    - DO NOT create overly complex configurations that are hard to maintain
+
+relevant_context: "{project_context}"
+
+examples:
+  - description: "Complete deployment setup for Node.js TypeScript API"
+    input: "Create deployment configuration for a Node.js TypeScript API with PostgreSQL and Redis"
+    output: |
+      {
+        "src/config/environment.ts": "import { z } from 'zod';\nimport dotenv from 'dotenv';\n\ndotenv.config();\n\nconst envSchema = z.object({\n  NODE_ENV: z.enum(['development', 'production', 'test', 'staging']).default('development'),\n  PORT: z.string().transform(val => parseInt(val, 10)).default('3000'),\n  DB_HOST: z.string(),\n  DB_PORT: z.string().transform(val => parseInt(val, 10)).default('5432'),\n  DB_NAME: z.string(),\n  DB_USERNAME: z.string(),\n  DB_PASSWORD: z.string(),\n  JWT_SECRET: z.string().min(32),\n  REDIS_HOST: z.string().default('localhost'),\n  REDIS_PORT: z.string().transform(val => parseInt(val, 10)).default('6379')\n});\n\nexport const env = envSchema.parse(process.env);\n\nexport const config = {\n  app: { port: env.PORT, env: env.NODE_ENV },\n  database: { host: env.DB_HOST, port: env.DB_PORT, name: env.DB_NAME, username: env.DB_USERNAME, password: env.DB_PASSWORD },\n  auth: { jwtSecret: env.JWT_SECRET },\n  redis: { host: env.REDIS_HOST, port: env.REDIS_PORT }\n};",
+        "Dockerfile": "FROM node:18-alpine AS base\n\nFROM base AS deps\nRUN apk add --no-cache libc6-compat\nWORKDIR /app\nCOPY package.json package-lock.json* ./\nRUN npm ci --only=production && npm cache clean --force\n\nFROM base AS build\nWORKDIR /app\nCOPY package.json package-lock.json* ./\nRUN npm ci\nCOPY . .\nRUN npm run build\n\nFROM base AS runner\nWORKDIR /app\nRUN addgroup --system --gid 1001 nodejs\nRUN adduser --system --uid 1001 nextjs\nCOPY --from=deps /app/node_modules ./node_modules\nCOPY --from=build /app/dist ./dist\nCOPY --from=build /app/package.json ./package.json\nUSER nextjs\nEXPOSE 3000\nHEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 CMD curl -f http://localhost:3000/health || exit 1\nENV NODE_ENV=production\nCMD [\"node\", \"dist/server.js\"]",
+        "docker-compose.yml": "version: '3.8'\nservices:\n  app:\n    build: .\n    ports:\n      - \"3000:3000\"\n    environment:\n      - NODE_ENV=production\n      - DB_HOST=postgres\n      - REDIS_HOST=redis\n    depends_on:\n      postgres:\n        condition: service_healthy\n      redis:\n        condition: service_healthy\n    restart: unless-stopped\n  postgres:\n    image: postgres:15-alpine\n    environment:\n      POSTGRES_DB: ${DB_NAME:-myapp}\n      POSTGRES_USER: ${DB_USERNAME:-myuser}\n      POSTGRES_PASSWORD: ${DB_PASSWORD:-mypassword}\n    ports:\n      - \"5432:5432\"\n    volumes:\n      - postgres_data:/var/lib/postgresql/data\n    healthcheck:\n      test: [\"CMD-SHELL\", \"pg_isready -U ${DB_USERNAME:-myuser}\"]\n      interval: 10s\n      timeout: 5s\n      retries: 5\n    restart: unless-stopped\n  redis:\n    image: redis:7-alpine\n    ports:\n      - \"6379:6379\"\n    volumes:\n      - redis_data:/data\n    healthcheck:\n      test: [\"CMD\", \"redis-cli\", \"ping\"]\n      interval: 10s\n      timeout: 5s\n      retries: 5\n    restart: unless-stopped\nvolumes:\n  postgres_data:\n  redis_data:",
+        ".env.example": "# Application\nNODE_ENV=development\nPORT=3000\nAPP_NAME=Backend API\n\n# Database\nDB_HOST=localhost\nDB_PORT=5432\nDB_NAME=myapp\nDB_USERNAME=myuser\nDB_PASSWORD=mypassword\n\n# Authentication\nJWT_SECRET=your-super-secret-jwt-key-at-least-32-characters-long\n\n# Redis\nREDIS_HOST=localhost\nREDIS_PORT=6379",
+        ".github/workflows/ci.yml": "name: CI/CD Pipeline\non:\n  push:\n    branches: [ main, develop ]\n  pull_request:\n    branches: [ main ]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    services:\n      postgres:\n        image: postgres:15\n        env:\n          POSTGRES_PASSWORD: postgres\n          POSTGRES_DB: test_db\n        options: >-\n          --health-cmd pg_isready\n          --health-interval 10s\n          --health-timeout 5s\n          --health-retries 5\n        ports:\n          - 5432:5432\n    steps:\n    - uses: actions/checkout@v3\n    - name: Setup Node.js\n      uses: actions/setup-node@v3\n      with:\n        node-version: '18'\n        cache: 'npm'\n    - name: Install dependencies\n      run: npm ci\n    - name: Run tests\n      run: npm test\n      env:\n        NODE_ENV: test\n        DB_HOST: localhost\n        DB_PORT: 5432\n        DB_NAME: test_db\n        DB_USERNAME: postgres\n        DB_PASSWORD: postgres"
+      }
+  - description: "Nginx reverse proxy configuration with SSL and security"
+    input: "Create Nginx configuration for reverse proxy with SSL and security headers"
+    output: |
+      {
+        "nginx/nginx.conf": "events {\n    worker_connections 1024;\n}\n\nhttp {\n    upstream backend {\n        server app:3000;\n    }\n\n    limit_req_zone $binary_remote_addr zone=api:10m rate=10r/s;\n\n    ssl_protocols TLSv1.2 TLSv1.3;\n    ssl_ciphers ECDHE-RSA-AES256-GCM-SHA512:DHE-RSA-AES256-GCM-SHA512;\n    ssl_prefer_server_ciphers off;\n\n    server {\n        listen 80;\n        server_name localhost;\n        return 301 https://$server_name$request_uri;\n    }\n\n    server {\n        listen 443 ssl http2;\n        server_name localhost;\n\n        ssl_certificate /etc/nginx/ssl/cert.pem;\n        ssl_certificate_key /etc/nginx/ssl/key.pem;\n\n        add_header X-Frame-Options DENY;\n        add_header X-Content-Type-Options nosniff;\n        add_header X-XSS-Protection \"1; mode=block\";\n        add_header Strict-Transport-Security \"max-age=31536000; includeSubDomains\" always;\n\n        gzip on;\n        gzip_vary on;\n        gzip_min_length 1024;\n\n        location /api/ {\n            limit_req zone=api burst=20 nodelay;\n            proxy_pass http://backend;\n            proxy_set_header Host $host;\n            proxy_set_header X-Real-IP $remote_addr;\n            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n            proxy_set_header X-Forwarded-Proto $scheme;\n        }\n\n        location /health {\n            proxy_pass http://backend/health;\n            access_log off;\n        }\n    }\n}"
+      }
+outputformats:
+  - type: "json"
+    format: |
+      {
+        "file_path": "file_content",
+        "folder_path/": "",
+        "config_file.yml": "yaml_content",
+        "script.sh": "bash_script_content"
+      }
+    description: "JSON object containing deployment configuration files including Dockerfiles, docker-compose files, environment configs, CI/CD pipelines, and deployment scripts"
+    example: |
+      {
+        "Dockerfile": "FROM node:18-alpine AS base...",
+        "docker-compose.yml": "version: '3.8'...",
+        "src/config/environment.ts": "import { z } from 'zod'...",
+        ".env.example": "NODE_ENV=development...",
+        ".github/workflows/ci.yml": "name: CI/CD Pipeline...",
+        "scripts/deploy.sh": "#!/bin/bash\nset -e..."
+      }

@@ -1,0 +1,5 @@
+My phone number is 555-123-4567 and my email is test@example.com. 
+I work at ACME Corp and my name is John Smith.
+My credit card number is 4111-1111-1111-1111 and my SSN is 123-45-6789.
+I live at IP address 192.168.1.1 and was born on 01/15/1990.
+You can reach me at jane.doe@company.org or call me at 555-987-6543. 
