@@ -1,5 +1,6 @@
 import React from 'react';
 import styled from 'styled-components';
+import PropTypes from 'prop-types';
 
 const Container = styled.div`
   max-height: 400px;
@@ -199,4 +200,17 @@ const AnonymizationOptions = ({ options, onChange }) => {
   );
 };
 
-export default AnonymizationOptions; 
+AnonymizationOptions.propTypes = {
+  options: PropTypes.objectOf(PropTypes.shape({
+    type: PropTypes.string.isRequired,
+    new_value: PropTypes.string,
+    masking_char: PropTypes.string,
+    chars_to_mask: PropTypes.number,
+    from_end: PropTypes.bool,
+    hash_type: PropTypes.string,
+    key: PropTypes.string
+  })).isRequired,
+  onChange: PropTypes.func.isRequired
+};
+
+export default AnonymizationOptions;

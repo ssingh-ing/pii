@@ -1,5 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import styled from 'styled-components';
+import PropTypes from 'prop-types';
+import { sanitizeHtml, createHighlightedSpan } from '../utils/sanitizer';
+import { showSuccess, showError } from '../utils/notifications';
 
 const Container = styled.div`
   background: white;
@@ -40,6 +43,15 @@ const Tab = styled.button`
   
   &:hover {
     background: ${props => props.active ? '#5a6fd8' : '#f0f2ff'};
+  }
+  
+  &:focus {
+    outline: 2px solid #667eea;
+    outline-offset: 2px;
+  }
+  
+  &:focus:not(:focus-visible) {
+    outline: none;
   }
 `;
 
@@ -189,47 +201,54 @@ const ResultsDisplay = ({ results, onDeanonymize }) => {
     document.body.removeChild(element);
   };
 
-  const copyToClipboard = (text) => {
-    navigator.clipboard.writeText(text).then(() => {
-      alert('Text copied to clipboard!');
-    });
-  };
+  const copyToClipboard = useCallback(async (text) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      showSuccess('Text copied to clipboard!');
+    } catch (error) {
+      showError('Failed to copy text to clipboard');
+    }
+  }, []);
 
-  const handleDeanonymize = () => {
+  const handleDeanonymize = useCallback(() => {
     if (results.operator_results && results.operator_results.length > 0) {
       onDeanonymize(results.anonymized, results.operator_results);
     } else {
-      alert('No operator results available for deanonymization');
+      showError('No operator results available for deanonymization');
     }
-  };
+  }, [results.operator_results, results.anonymized, onDeanonymize]);
 
-  const renderHighlightedText = (text, entities) => {
-    if (!entities || entities.length === 0) return text;
+  const renderHighlightedText = useMemo(() => {
+    return (text, entities) => {
+      if (!entities || entities.length === 0) return text;
 
-    let highlightedText = text;
-    let offset = 0;
+      let highlightedText = text;
+      let offset = 0;
 
-    // Sort entities by start position
-    const sortedEntities = [...entities].sort((a, b) => a.start - b.start);
+      // Sort entities by start position to avoid overlap issues
+      const sortedEntities = [...entities].sort((a, b) => a.start - b.start);
 
-    sortedEntities.forEach((entity) => {
-      const beforeText = highlightedText.slice(0, entity.start + offset);
-      const entityText = highlightedText.slice(entity.start + offset, entity.end + offset);
-      const afterText = highlightedText.slice(entity.end + offset);
-      
-      const highlighted = `<span style="background-color: #ffeb3b; padding: 2px 4px; border-radius: 3px; font-weight: bold;" title="${entity.entity_type} (${entity.score})">${entityText}</span>`;
-      
-      highlightedText = beforeText + highlighted + afterText;
-      offset += highlighted.length - entityText.length;
-    });
+      sortedEntities.forEach((entity) => {
+        const beforeText = highlightedText.slice(0, entity.start + offset);
+        const entityText = highlightedText.slice(entity.start + offset, entity.end + offset);
+        const afterText = highlightedText.slice(entity.end + offset);
+        
+        const highlighted = createHighlightedSpan(entityText, entity.entity_type, entity.score);
+        
+        highlightedText = beforeText + highlighted + afterText;
+        offset += highlighted.length - entityText.length;
+      });
 
-    return <div dangerouslySetInnerHTML={{ __html: highlightedText }} />;
-  };
+      return <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(highlightedText) }} />;
+    };
+  }, []);
 
-  const entityStats = results.entities ? results.entities.reduce((acc, entity) => {
-    acc[entity.entity_type] = (acc[entity.entity_type] || 0) + 1;
-    return acc;
-  }, {}) : {};
+  const entityStats = useMemo(() => {
+    return results.entities ? results.entities.reduce((acc, entity) => {
+      acc[entity.entity_type] = (acc[entity.entity_type] || 0) + 1;
+      return acc;
+    }, {}) : {};
+  }, [results.entities]);
 
   return (
     <Container>
@@ -256,28 +275,67 @@ const ResultsDisplay = ({ results, onDeanonymize }) => {
         </StatCard>
       </StatsContainer>
 
-      <TabContainer>
-        <Tab active={activeTab === 'original'} onClick={() => setActiveTab('original')}>
+      <TabContainer role="tablist" aria-label="Results display options">
+        <Tab 
+          active={activeTab === 'original'} 
+          onClick={() => setActiveTab('original')}
+          role="tab"
+          aria-selected={activeTab === 'original'}
+          aria-controls="original-panel"
+          id="original-tab"
+        >
           📝 Original Text
         </Tab>
-        <Tab active={activeTab === 'anonymized'} onClick={() => setActiveTab('anonymized')}>
+        <Tab 
+          active={activeTab === 'anonymized'} 
+          onClick={() => setActiveTab('anonymized')}
+          role="tab"
+          aria-selected={activeTab === 'anonymized'}
+          aria-controls="anonymized-panel"
+          id="anonymized-tab"
+        >
           🔒 Anonymized Text
         </Tab>
-        <Tab active={activeTab === 'entities'} onClick={() => setActiveTab('entities')}>
+        <Tab 
+          active={activeTab === 'entities'} 
+          onClick={() => setActiveTab('entities')}
+          role="tab"
+          aria-selected={activeTab === 'entities'}
+          aria-controls="entities-panel"
+          id="entities-tab"
+        >
           🏷️ Detected Entities
         </Tab>
-        <Tab active={activeTab === 'metadata'} onClick={() => setActiveTab('metadata')}>
+        <Tab 
+          active={activeTab === 'metadata'} 
+          onClick={() => setActiveTab('metadata')}
+          role="tab"
+          aria-selected={activeTab === 'metadata'}
+          aria-controls="metadata-panel"
+          id="metadata-tab"
+        >
           📋 Metadata
         </Tab>
         {results.deanonymized && (
-          <Tab active={activeTab === 'deanonymized'} onClick={() => setActiveTab('deanonymized')}>
+          <Tab 
+            active={activeTab === 'deanonymized'} 
+            onClick={() => setActiveTab('deanonymized')}
+            role="tab"
+            aria-selected={activeTab === 'deanonymized'}
+            aria-controls="deanonymized-panel"
+            id="deanonymized-tab"
+          >
             🔓 Deanonymized
           </Tab>
         )}
       </TabContainer>
 
       {activeTab === 'original' && (
-        <TextDisplay>
+        <TextDisplay 
+          role="tabpanel" 
+          aria-labelledby="original-tab"
+          id="original-panel"
+        >
           {results.entities ? 
             renderHighlightedText(results.original, results.entities) : 
             results.original
@@ -286,22 +344,30 @@ const ResultsDisplay = ({ results, onDeanonymize }) => {
       )}
 
       {activeTab === 'anonymized' && (
-        <TextDisplay>
+        <TextDisplay 
+          role="tabpanel" 
+          aria-labelledby="anonymized-tab"
+          id="anonymized-panel"
+        >
           {results.anonymized}
         </TextDisplay>
       )}
 
       {activeTab === 'entities' && (
-        <EntitiesContainer>
+        <EntitiesContainer 
+          role="tabpanel" 
+          aria-labelledby="entities-tab"
+          id="entities-panel"
+        >
           <div style={{ marginBottom: '15px' }}>
             {Object.entries(entityStats).map(([type, count]) => (
-              <EntityBadge key={type}>
+              <EntityBadge key={type} aria-label={`${type}: ${count} entities`}>
                 {type}: {count}
               </EntityBadge>
             ))}
           </div>
           {results.entities && results.entities.map((entity, index) => (
-            <EntityInfo key={index}>
+            <EntityInfo key={index} role="group" aria-label={`Entity ${index + 1}`}>
               <div><strong>Type:</strong> {entity.entity_type}</div>
               <div><strong>Text:</strong> <EntityText>{results.original.slice(entity.start, entity.end)}</EntityText></div>
               <div><strong>Position:</strong> {entity.start}-{entity.end}</div>
@@ -312,25 +378,42 @@ const ResultsDisplay = ({ results, onDeanonymize }) => {
       )}
 
       {activeTab === 'metadata' && (
-        <JsonDisplay>
+        <JsonDisplay 
+          role="tabpanel" 
+          aria-labelledby="metadata-tab"
+          id="metadata-panel"
+        >
           {JSON.stringify(results, null, 2)}
         </JsonDisplay>
       )}
 
       {activeTab === 'deanonymized' && results.deanonymized && (
-        <TextDisplay>
+        <TextDisplay 
+          role="tabpanel" 
+          aria-labelledby="deanonymized-tab"
+          id="deanonymized-panel"
+        >
           {results.deanonymized.text}
         </TextDisplay>
       )}
 
       <ActionButtons>
-        <CopyButton onClick={() => copyToClipboard(results.anonymized)}>
+        <CopyButton 
+          onClick={() => copyToClipboard(results.anonymized)}
+          aria-label="Copy anonymized text to clipboard"
+        >
           📋 Copy Anonymized Text
         </CopyButton>
-        <DownloadButton onClick={() => downloadText(results.anonymized, 'anonymized_text.txt')}>
+        <DownloadButton 
+          onClick={() => downloadText(results.anonymized, 'anonymized_text.txt')}
+          aria-label="Download anonymized text as file"
+        >
           💾 Download Anonymized
         </DownloadButton>
-        <DeanonymizeButton onClick={handleDeanonymize}>
+        <DeanonymizeButton 
+          onClick={handleDeanonymize}
+          aria-label="Deanonymize the text"
+        >
           🔓 Deanonymize
         </DeanonymizeButton>
       </ActionButtons>
@@ -338,4 +421,22 @@ const ResultsDisplay = ({ results, onDeanonymize }) => {
   );
 };
 
-export default ResultsDisplay; 
+ResultsDisplay.propTypes = {
+  results: PropTypes.shape({
+    original: PropTypes.string,
+    anonymized: PropTypes.string,
+    entities: PropTypes.arrayOf(PropTypes.shape({
+      start: PropTypes.number.isRequired,
+      end: PropTypes.number.isRequired,
+      score: PropTypes.number.isRequired,
+      entity_type: PropTypes.string.isRequired
+    })),
+    operator_results: PropTypes.array,
+    deanonymized: PropTypes.shape({
+      text: PropTypes.string
+    })
+  }).isRequired,
+  onDeanonymize: PropTypes.func.isRequired
+};
+
+export default ResultsDisplay;

@@ -1,6 +1,7 @@
 import React, { useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import styled from 'styled-components';
+import PropTypes from 'prop-types';
 
 const DropzoneContainer = styled.div`
   border: 2px dashed #ccc;
@@ -72,9 +73,12 @@ const FileUpload = ({ onFileUpload }) => {
     <DropzoneContainer 
       {...getRootProps()} 
       className={isDragActive ? 'active' : ''}
+      role="button"
+      aria-label="Upload file area"
+      tabIndex={0}
     >
-      <input {...getInputProps()} />
-      <FileIcon>📄</FileIcon>
+      <input {...getInputProps()} aria-label="File upload input" />
+      <FileIcon aria-hidden="true">📄</FileIcon>
       <DropzoneText>
         {isDragActive ? (
           <strong>Drop the file here...</strong>
@@ -91,4 +95,8 @@ const FileUpload = ({ onFileUpload }) => {
   );
 };
 
-export default FileUpload; 
+FileUpload.propTypes = {
+  onFileUpload: PropTypes.func.isRequired
+};
+
+export default FileUpload;
